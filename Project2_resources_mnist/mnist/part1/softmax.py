@@ -31,8 +31,23 @@ def compute_probabilities(X, theta, temp_parameter):
     Returns:
         H - (k, n) NumPy array, where each entry H[j][i] is the probability that X[i] is labeled as j
     """
-    #YOUR CODE HERE
-    raise NotImplementedError
+    # Compute the dot product of theta and X, scaled by the temperature parameter
+    scaled_logits = np.dot(theta, X.T) / temp_parameter
+    
+    # To prevent overflow issues, subtract the max value from each row
+    max_scaled_logits = np.max(scaled_logits, axis=0)
+    stabilized_logits = scaled_logits - max_scaled_logits
+    
+    # Compute the exponentials of the stabilized logits
+    exp_logits = np.exp(stabilized_logits)
+    
+    # Compute the sum of exponentials for normalization
+    sum_exp_logits = np.sum(exp_logits, axis=0)
+    
+    # Compute the probabilities by normalizing the exponentials
+    probabilities = exp_logits / sum_exp_logits
+    
+    return probabilities
 
 def compute_cost_function(X, Y, theta, lambda_factor, temp_parameter):
     """
@@ -50,8 +65,27 @@ def compute_cost_function(X, Y, theta, lambda_factor, temp_parameter):
     Returns
         c - the cost value (scalar)
     """
-    #YOUR CODE HERE
-    raise NotImplementedError
+    n = X.shape[0]
+    k = theta.shape[0]
+
+    # Compute the probabilities
+    probabilities = compute_probabilities(X, theta, temp_parameter)
+
+    # Create a one-hot encoding for Y
+    Y_one_hot = np.zeros((k, n))
+    Y_one_hot[Y, np.arange(n)] = 1
+
+    # Compute the cross-entropy loss
+    log_probabilities = np.log(probabilities + 1e-15)  # Add a small constant to avoid log(0)
+    cross_entropy_loss = -1 / n * np.sum(Y_one_hot * log_probabilities)
+
+    # Compute the regularization term
+    regularization_term = lambda_factor / 2 * np.sum(theta ** 2)
+
+    # Compute the total cost
+    cost = cross_entropy_loss + regularization_term
+
+    return cost
 
 def run_gradient_descent_iteration(X, Y, theta, alpha, lambda_factor, temp_parameter):
     """
@@ -71,7 +105,23 @@ def run_gradient_descent_iteration(X, Y, theta, alpha, lambda_factor, temp_param
         theta - (k, d) NumPy array that is the final value of parameters theta
     """
     #YOUR CODE HERE
-    raise NotImplementedError
+    n, d = X.shape
+    k = theta.shape[0]
+
+    # Compute the probabilities
+    probabilities = compute_probabilities(X, theta, temp_parameter)
+
+    # Create a sparse indicator matrix for Y
+    rows = np.arange(n)
+    indicator_matrix = sparse.coo_matrix((np.ones(n), (Y, rows)), shape=(k, n)).toarray()
+
+    # Compute the gradient
+    gradient = -1 / (temp_parameter * n) * np.dot((indicator_matrix - probabilities), X) + lambda_factor * theta
+
+    # Update theta
+    theta -= alpha * gradient
+
+    return theta
 
 def update_y(train_y, test_y):
     """
@@ -90,8 +140,11 @@ def update_y(train_y, test_y):
         test_y_mod3 - (n, ) NumPy array containing the new labels (a number between 0-2)
                     for each datapoint in the test set
     """
-    #YOUR CODE HERE
-    raise NotImplementedError
+    # Compute the new labels by taking the old labels modulo 3
+    train_y_mod3 = train_y % 3
+    test_y_mod3 = test_y % 3
+    
+    return train_y_mod3, test_y_mod3
 
 def compute_test_error_mod3(X, Y, theta, temp_parameter):
     """
@@ -108,8 +161,16 @@ def compute_test_error_mod3(X, Y, theta, temp_parameter):
     Returns:
         test_error - the error rate of the classifier (scalar)
     """
-    #YOUR CODE HERE
-    raise NotImplementedError
+    # Get the predicted labels
+    pred_y = get_classification(X, theta, temp_parameter)
+    
+    # Compute the new predicted labels (mod 3)
+    pred_y_mod3 = pred_y % 3
+    
+    # Compute the test error
+    test_error = 1 - np.mean(pred_y_mod3 == Y)
+    
+    return test_error
 
 def softmax_regression(X, Y, temp_parameter, alpha, lambda_factor, k, num_iterations):
     """

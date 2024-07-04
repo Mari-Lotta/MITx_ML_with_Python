@@ -15,9 +15,12 @@ def closed_form(X, Y, lambda_factor):
         theta - (d + 1, ) NumPy array containing the weights of linear regression. Note that theta[0]
         represents the y-axis intercept of the model and therefore X[0] = 1
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
-
+    n_features = X.shape[1]
+    I = np.eye(n_features)
+    X_transpose = X.T
+    theta = np.linalg.inv(X_transpose @ X + lambda_factor * I) @ X_transpose @ Y
+    return theta
+ 
 ### Functions which are already complete, for you to use ###
 
 def compute_test_error_linear(test_x, Y, theta):
