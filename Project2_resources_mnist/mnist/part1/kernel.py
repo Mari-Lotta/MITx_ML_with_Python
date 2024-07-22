@@ -19,8 +19,16 @@ def polynomial_kernel(X, Y, c, p):
         Returns:
             kernel_matrix - (n, m) Numpy array containing the kernel matrix
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    # Compute the dot product between each pair of rows in X and Y
+    dot_product = np.dot(X, Y.T)
+    
+    # Add the coefficient c to each element
+    dot_product_plus_c = dot_product + c
+    
+    # Raise each element to the power of p
+    kernel_matrix = np.power(dot_product_plus_c, p)
+    
+    return kernel_matrix
 
 
 

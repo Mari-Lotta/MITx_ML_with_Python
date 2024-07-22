@@ -8,15 +8,18 @@ from svm import *
 from softmax import *
 from features import *
 from kernel import *
+from sklearn.svm import SVC
+from sklearn.decomposition import PCA
+from sklearn.metrics import accuracy_score
 
 # #######################################################################
 # # 1. Introduction
 # #######################################################################
 
-# # Load MNIST data:
-# train_x, train_y, test_x, test_y = get_MNIST_data()
-# # Plot the first 20 images of the training set.
-# plot_images(train_x[0:20, :])
+# Load MNIST data:
+train_x, train_y, test_x, test_y = get_MNIST_data()
+# Plot the first 20 images of the training set.
+plot_images(train_x[0:20, :])
 
 # #######################################################################
 # # 2. Linear Regression with Closed Form Solution
@@ -188,6 +191,41 @@ test_pca = project_onto_PC(test_x, pcs, n_components, feature_means)
 
 # TODO: Train your softmax regression model using (train_pca, train_y)
 #       and evaluate its accuracy on (test_pca, test_y).
+def run_softmax_on_MNIST_pca(temp_parameter=1):
+    """
+    Trains softmax regression on PCA-reduced MNIST dataset.
+
+    Returns:
+        Final test error
+    """
+    # Load MNIST data
+    train_x, train_y, test_x, test_y = get_MNIST_data()
+
+    # Center the data
+    train_x_centered, feature_means = center_data(train_x)
+    
+    # Compute the principal components
+    pcs = principal_components(train_x_centered)
+    
+    # Project the training and test data onto the first 18 principal components
+    n_components = 18
+    train_pca = project_onto_PC(train_x, pcs, n_components, feature_means)
+    test_pca = project_onto_PC(test_x, pcs, n_components, feature_means)
+    
+    # Train the softmax regression model using the PCA-reduced training data
+    theta, cost_function_history = softmax_regression(train_pca, train_y, temp_parameter, alpha=0.3, lambda_factor=1.0e-4, k=10, num_iterations=150)
+    
+    # Evaluate the model on the PCA-reduced test data
+    test_error = compute_test_error(test_pca, test_y, theta, temp_parameter)
+    print(f'Error rate for 18-dimensional PCA features = {test_error:.6f}')
+    
+    # Save the model parameters theta obtained from calling softmax_regression to disk
+    write_pickle_data(theta, "./theta_pca.pkl.gz")
+
+    # Plot the cost function over time
+    return test_error
+
+test_error_pca = run_softmax_on_MNIST_pca()
 
 
 # TODO: Use the plot_PC function in features.py to produce scatterplot
@@ -213,6 +251,9 @@ plot_images(train_x[1, ])
 # TODO: Find the 10-dimensional PCA representation of the training and test set
 
 
+n_components_pca = 10
+train_pca10 = project_onto_PC(train_x, pcs, n_components_pca, feature_means)
+test_pca10 = project_onto_PC(test_x, pcs, n_components_pca, feature_means)
 # TODO: First fill out cubicFeatures() function in features.py as the below code requires it.
 
 train_cube = cubic_features(train_pca10)
@@ -220,6 +261,108 @@ test_cube = cubic_features(test_pca10)
 # train_cube (and test_cube) is a representation of our training (and test) data
 # after applying the cubic kernel feature mapping to the 10-dimensional PCA representations.
 
+def run_softmax_on_MNIST_pca_and_cubic(temp_parameter=1):
+    """
+    Trains softmax regression on PCA-reduced and cubic-feature-mapped MNIST dataset.
+
+    Returns:
+        Final test error
+    """
+    # Load MNIST data
+    train_x, train_y, test_x, test_y = get_MNIST_data()
+
+    # Center the data
+    train_x_centered, feature_means = center_data(train_x)
+    
+    # Compute the principal components
+    pcs = principal_components(train_x_centered)
+    
+    # Project the training and test data onto the first 10 principal components
+    n_components_pca = 10
+    train_pca10 = project_onto_PC(train_x, pcs, n_components_pca, feature_means)
+    test_pca10 = project_onto_PC(test_x, pcs, n_components_pca, feature_means)
+    
+    # Compute cubic features
+    train_cube = cubic_features(train_pca10)
+    test_cube = cubic_features(test_pca10)
+    
+    # Train the softmax regression model using the cubic-feature-mapped training data
+    theta, cost_function_history = softmax_regression(train_cube, train_y, temp_parameter, alpha=0.3, lambda_factor=1.0e-4, k=10, num_iterations=150)
+    
+    # Evaluate the model on the cubic-feature-mapped test data
+    test_error = compute_test_error(test_cube, test_y, theta, temp_parameter)
+    print(f'Error rate for cubic-feature-mapped PCA features = {test_error:.6f}')
+    
+    # Save the model parameters theta obtained from calling softmax_regression to disk
+    write_pickle_data(theta, "./theta_pca_cubic.pkl.gz")
+
+    return test_error
+
+test_error_pca_cubic = run_softmax_on_MNIST_pca_and_cubic()
 
 # TODO: Train your softmax regression model using (train_cube, train_y)
 #       and evaluate its accuracy on (test_cube, test_y).
+
+def run_svm_on_pca():
+    """
+    Trains an SVM with a cubic polynomial kernel on the 10-dimensional PCA-reduced MNIST dataset.
+
+    Returns:
+        Final test error
+    """
+    # Load MNIST data
+    train_x, train_y, test_x, test_y = get_MNIST_data()
+
+    # Compute the 10-dimensional PCA representation
+    pca = PCA(n_components=10)
+    train_pca10 = pca.fit_transform(train_x)
+    test_pca10 = pca.transform(test_x)
+
+    # Train the SVM model
+    svm_model = SVC(kernel='poly', degree=3, random_state=0)
+    svm_model.fit(train_pca10, train_y)
+
+    # Predict on the test data
+    test_predictions = svm_model.predict(test_pca10)
+
+    # Compute the test error
+    test_accuracy = accuracy_score(test_y, test_predictions)
+    test_error = 1 - test_accuracy
+    print(f'Error rate for 10-dimensional PCA features using cubic polynomial SVM = {test_error:.6f}')
+
+    return test_error
+
+test_error_svm = run_svm_on_pca()
+
+def run_rbf_svm_on_pca():
+    """
+    Trains an SVM with an RBF kernel on the 10-dimensional PCA-reduced MNIST dataset.
+
+    Returns:
+        Final test error
+    """
+    # Load MNIST data
+    train_x, train_y, test_x, test_y = get_MNIST_data()
+
+    # Compute the 10-dimensional PCA representation
+    pca = PCA(n_components=10)
+    train_pca10 = pca.fit_transform(train_x)
+    test_pca10 = pca.transform(test_x)
+
+    # Train the SVM model
+    svm_model = SVC(kernel='rbf', random_state=0)
+    svm_model.fit(train_pca10, train_y)
+
+    # Predict on the test data
+    test_predictions = svm_model.predict(test_pca10)
+
+    # Compute the test accuracy
+    test_accuracy = accuracy_score(test_y, test_predictions)
+    
+    # Compute the test error
+    test_error = 1 - test_accuracy
+    print(f'Error rate for 10-dimensional PCA features using RBF SVM = {test_error:.6f}')
+
+    return test_error
+
+test_error_rbf_svm = run_rbf_svm_on_pca()
