@@ -1,0 +1,223 @@
+"""Linear QL agent"""
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import framework
+import utils
+
+DEBUG = False
+
+
+GAMMA = 0.5  # discounted factor
+TRAINING_EP = 0.5  # epsilon-greedy parameter for training
+TESTING_EP = 0.05  # epsilon-greedy parameter for testing
+NUM_RUNS = 5
+NUM_EPOCHS = 600
+NUM_EPIS_TRAIN = 25  # number of episodes for training at each epoch
+NUM_EPIS_TEST = 50  # number of episodes for testing
+ALPHA = 0.01  # learning rate for training
+
+ACTIONS = framework.get_actions()
+OBJECTS = framework.get_objects()
+NUM_ACTIONS = len(ACTIONS)
+NUM_OBJECTS = len(OBJECTS)
+
+
+def tuple2index(action_index, object_index):
+    """Converts a tuple (a,b) to an index c"""
+    return action_index * NUM_OBJECTS + object_index
+
+
+def index2tuple(index):
+    """Converts an index c to a tuple (a,b)"""
+    return index // NUM_OBJECTS, index % NUM_OBJECTS
+
+
+# pragma: coderesponse template name="linear_epsilon_greedy"
+def epsilon_greedy(state_vector, theta, epsilon):
+    """Returns an action selected by an epsilon-greedy exploration policy
+
+    Args:
+        state_vector (np.ndarray): extracted vector representation
+        theta (np.ndarray): current weight matrix
+        epsilon (float): the probability of choosing a random command
+
+    Returns:
+        (int, int): the indices describing the action/object to take
+    """
+        # Exploration vs. Exploitation
+    if np.random.rand() < epsilon:
+        # Explore: choose a random action and object
+        action_index = np.random.randint(0, NUM_ACTIONS)
+        object_index = np.random.randint(0, NUM_OBJECTS)
+    else:
+        # Exploit: choose the action-object pair with the maximum Q-value
+        # Compute Q-values for all actions
+        q_values = theta @ state_vector  # Result is a vector of Q-values for all action-object pairs
+        
+        # Find the index of the maximum Q-value
+        max_index = np.argmax(q_values)
+        
+        # Convert the flat index back to (action_index, object_index)
+        action_index, object_index = index2tuple(max_index)
+
+    return action_index, object_index
+# pragma: coderesponse end
+
+
+# pragma: coderesponse template
+def linear_q_learning(theta, current_state_vector, action_index, object_index,
+                      reward, next_state_vector, terminal):
+    """Update theta for a given transition
+
+    Args:
+        theta (np.ndarray): current weight matrix
+        current_state_vector (np.ndarray): vector representation of current state
+        action_index (int): index of the current action
+        object_index (int): index of the current object
+        reward (float): the immediate reward the agent recieves from playing current command
+        next_state_vector (np.ndarray): vector representation of next state
+        terminal (bool): True if this epsiode is over
+
+    Returns:
+        None
+    """
+    # Flatten the action-object pair indices to a single index
+    action_object_index = tuple2index(action_index, object_index)
+    
+    # Compute the current Q-value
+    current_q_value = (theta @ current_state_vector)[action_object_index]
+    
+    if terminal:
+        # If terminal, the target value y is simply the reward
+        target_value = reward
+    else:
+        # If not terminal, compute the target value using the max Q-value for the next state
+        next_q_values = theta @ next_state_vector
+        max_next_q_value = np.max(next_q_values)
+        target_value = reward + GAMMA * max_next_q_value
+    
+    # Compute the error term (target - current Q-value)
+    error = target_value - current_q_value
+    
+    # Update the weights for the current action-object pair
+    theta[action_object_index, :] += ALPHA * error * current_state_vector
+
+    return None
+# pragma: coderesponse end
+
+
+def run_episode(for_training):
+    """Runs one episode.
+    If for training, update Q function.
+    If for testing, computes and returns cumulative discounted reward.
+
+    Args:
+        for_training (bool): True if for training.
+
+    Returns:
+        float: The cumulative discounted reward if testing, otherwise None.
+    """
+    epsilon = TRAINING_EP if for_training else TESTING_EP
+    epi_reward = 0.0
+    discount_factor = 1.0  # Start with γ^0 = 1
+
+    # Initialize the game
+    current_room_desc, current_quest_desc, terminal = framework.newGame()
+
+    while not terminal:
+        # Create the current state vector
+        current_state = current_room_desc + current_quest_desc
+        current_state_vector = utils.extract_bow_feature_vector(current_state, dictionary)
+
+        # Choose action using epsilon-greedy policy
+        action_index, object_index = epsilon_greedy(current_state_vector, theta, epsilon)
+
+        # Execute action and observe next state and reward
+        next_room_desc, next_quest_desc, reward, terminal = framework.step_game(
+            current_room_desc, current_quest_desc, action_index, object_index)
+
+        # Create the next state vector
+        next_state = next_room_desc + next_quest_desc
+        next_state_vector = utils.extract_bow_feature_vector(next_state, dictionary)
+
+        if for_training:
+            # Update Q-function using linear Q-learning
+            linear_q_learning(theta, current_state_vector, action_index, object_index, 
+                              reward, next_state_vector, terminal)
+
+        if not for_training:
+            # Update cumulative reward
+            epi_reward += discount_factor * reward
+            discount_factor *= GAMMA  # Update the discount factor for the next step
+
+        # Move to the next state
+        current_room_desc = next_room_desc
+        current_quest_desc = next_quest_desc
+
+    if not for_training:
+        return epi_reward
+
+
+def run_epoch():
+    """Runs one epoch and returns reward averaged over test episodes"""
+    rewards = []
+
+    for _ in range(NUM_EPIS_TRAIN):
+        run_episode(for_training=True)
+
+    for _ in range(NUM_EPIS_TEST):
+        rewards.append(run_episode(for_training=False))
+
+    return np.mean(np.array(rewards))
+
+
+def run():
+    """Returns array of test rewards per epoch for one run."""
+    global theta
+    theta = np.zeros([action_dim, state_dim])
+
+    single_run_epoch_rewards_test = []
+    pbar = tqdm(range(NUM_EPOCHS), ncols=80)
+    for _ in pbar:
+        single_run_epoch_rewards_test.append(run_epoch())
+        pbar.set_description(
+            "Avg reward: {:0.6f} | Ewma reward: {:0.6f}".format(
+                np.mean(single_run_epoch_rewards_test),
+                utils.ewma(single_run_epoch_rewards_test)))
+    return single_run_epoch_rewards_test
+
+if __name__ == '__main__':
+    state_texts = utils.load_data('game.tsv')
+    dictionary = utils.bag_of_words(state_texts)
+    state_dim = len(dictionary)
+    action_dim = NUM_ACTIONS * NUM_OBJECTS
+
+    # set up the game
+    framework.load_game_data()
+
+    epoch_rewards_test = []  # shape NUM_RUNS * NUM_EPOCHS
+
+    for _ in range(NUM_RUNS):
+        epoch_rewards_test.append(run())
+
+    epoch_rewards_test = np.array(epoch_rewards_test)
+
+    # Calculate the average reward over the last epochs where convergence occurs
+    # Here, assuming convergence around the last 50 epochs
+    convergence_start = 550  # Adjust this value based on your observation
+    avg_reward_at_convergence = np.mean(epoch_rewards_test[:, convergence_start:])
+    
+    print(f"Average episodic rewards at convergence: {avg_reward_at_convergence:.4f}")
+
+    # Plotting the results
+    x = np.arange(NUM_EPOCHS)
+    fig, axis = plt.subplots()
+    axis.plot(x, np.mean(epoch_rewards_test, axis=0))  # plot reward per epoch averaged per run
+    axis.set_xlabel('Epochs')
+    axis.set_ylabel('reward')
+    axis.set_title(('Linear: nRuns=%d, Epsilon=%.2f, Epi=%d, alpha=%.4f' %
+                    (NUM_RUNS, TRAINING_EP, NUM_EPIS_TRAIN, ALPHA)))
+    plt.show()
+
+

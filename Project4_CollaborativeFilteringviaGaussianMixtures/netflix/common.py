@@ -62,12 +62,12 @@ def plot(X: np.ndarray, mixture: GaussianMixture, post: np.ndarray,
         for j in range(K):
             offset = percent[i, j] * 360
             arc = Arc(point,
-                      r,
-                      r,
-                      0,
-                      theta,
-                      theta + offset,
-                      edgecolor=color[j])
+                    r,
+                    r,
+                    angle = 0,
+                    theta1 = theta,
+                    theta2 = theta + offset,
+                    edgecolor=color[j])
             ax.add_patch(arc)
             theta += offset
     for j in range(K):
@@ -98,4 +98,13 @@ def bic(X: np.ndarray, mixture: GaussianMixture,
     Returns:
         float: the BIC for this mixture
     """
-    raise NotImplementedError
+    n, d = X.shape  # Number of data points (n) and dimensionality (d)
+    K = mixture.mu.shape[0]  # Number of mixture components (K)
+
+    # Number of free parameters: K*d for means, K for variances, and (K-1) for mixing coefficients
+    p = K * d + K + (K - 1)
+
+    # BIC calculation
+    bic_value = log_likelihood - 0.5 * p * np.log(n)
+
+    return bic_value
